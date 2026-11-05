@@ -16,3 +16,14 @@
 - 👤 [Explore the creator's projects](https://go.ondev.store/hamdanyuwavi04-dotcom).
 - 🌍 [Create with OMGithub](https://go.ondev.store/).
 <!-- omgithub:readme:end -->
+
+## Cara bermain
+
+Buka `index.html` di browser untuk langsung bermain. Kumpulkan bintang sambil menghindari asteroid.
+
+- Bergerak: **WASD** atau **tombol panah**
+- Dorongan cepat: **Shift** atau **Space**
+- Jeda: **P** atau tombol jeda
+- Di ponsel, gunakan kontrol sentuh di bawah area permainan
+
+Skor tertinggi tersimpan di browser yang kamu gunakan.
