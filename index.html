@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>Block Pop</title>
+  <style>
+    :root { --bg:#10172f; --panel:#18223e; --line:#293657; --text:#eef3ff; }
+    * { box-sizing:border-box; }
+    html,body { height:100%; margin:0; overflow:hidden; }
+    body { font-family:Inter,system-ui,-apple-system,sans-serif; color:var(--text); background:radial-gradient(circle at 50% 15%,#263760 0,#171f3b 38%,#0d1227 100%); }
+    .game { height:100dvh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom)); }
+    .top { width:min(92vw,520px); display:flex; align-items:center; justify-content:space-between; }
+    h1 { margin:0; font-size:24px; letter-spacing:.5px; }
+    .scorebox { background:#202e51; border:1px solid #344873; border-radius:14px; padding:8px 13px; min-width:105px; text-align:center; box-shadow:0 8px 20px #080d1a55; }
+    .scorebox small { display:block; color:#9dacd0; font-size:10px; letter-spacing:1.5px; }
+    #score { font-size:22px; font-weight:900; }
+    .board { position:relative; width:min(92vw,520px); aspect-ratio:1; display:grid; grid-template-columns:repeat(10,1fr); gap:3px; padding:8px; border-radius:18px; background:#111936; border:1px solid #303f65; box-shadow:0 18px 50px #070a17aa,inset 0 1px #64769e33; touch-action:none; }
+    .cell { border-radius:5px; background:#1d294a; border:1px solid #26365a; transition:background .08s,transform .08s,box-shadow .08s; }
+    .cell.preview { background:#536da1!important; box-shadow:0 0 12px #809cff55; }
+    .cell.invalid { background:#5c3049!important; }
+    .tray { width:min(92vw,520px); height:142px; display:flex; align-items:center; justify-content:space-around; gap:8px; }
+    .piece { position:relative; display:grid; gap:2px; cursor:grab; touch-action:none; filter:drop-shadow(0 6px 8px #080b18aa); }
+    .piece:active { cursor:grabbing; }
+    .piece.used { opacity:.12; pointer-events:none; }
+    .block { width:100%; aspect-ratio:1; border-radius:4px; border:1px solid #ffffff30; box-shadow:inset 0 2px 3px #ffffff36,inset 0 -3px 4px #00000020; }
+    .ghost { position:fixed; z-index:20; pointer-events:none; display:grid; gap:3px; opacity:.78; transform:translate(-50%,-65%); }
+    .controls { height:30px; display:flex; gap:8px; }
+    button { border:0; border-radius:10px; color:white; background:#27385f; padding:8px 12px; font-weight:800; cursor:pointer; }
+    .overlay { position:absolute; inset:0; z-index:30; display:none; align-items:center; justify-content:center; border-radius:18px; background:#090d20dd; backdrop-filter:blur(5px); }
+    .overlay.show { display:flex; }
+    .modal { text-align:center; }
+    .modal h2 { margin:0 0 6px; font-size:34px; }
+    .modal p { color:#abb9d8; margin:0 0 16px; }
+    .modal button { background:linear-gradient(135deg,#7a61ff,#c05cff); padding:12px 24px; }
+    .rowflash { animation:flash .22s ease; }
+    @keyframes flash { 50% { transform:scale(.82); filter:brightness(2); } }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <div class="top">
+      <h1>BLOCK POP</h1>
+      <div class="scorebox"><small>SKOR</small><span id="score">0</span></div>
+    </div>
+    <div class="board" id="board">
+      <div class="overlay" id="overlay"><div class="modal"><h2>GAME OVER</h2><p id="final">Skor: 0</p><button id="restart">Main Lagi</button></div></div>
+    </div>
+    <div class="tray" id="tray"></div>
+  </main>
+  <script>
+    const boardEl=document.getElementById('board'), trayEl=document.getElementById('tray'), scoreEl=document.getElementById('score'), overlay=document.getElementById('overlay'), finalEl=document.getElementById('final');
+    const colors=['#36c5f0','#6a78ff','#b24fff','#ffb82e','#45dda0','#ff6577'];
+    let board,score,pieces,drag=null,best=+localStorage.getItem('blockpop-best')||0;
+    const shapes=[[[1]],[[1,1]],[[1],[1]],[[1,1],[1,1]],[[1,1,1]],[[1],[1],[1]],[[1,1,1],[0,1,0]],[[1,0],[1,0],[1,1]],[[1,1,1],[1,1,1]],[[1,1,1],[0,1,0],[0,1,0]],[[1,1],[1,0],[1,0]],[[1,0,0],[1,1,1]],[[1,1,1,1]],[[1],[1],[1],[1]],[[1,1,1],[1,0,0],[1,0,0]]];
+
+    function init(){
+      board=Array(100).fill(null); score=0; scoreEl.textContent='0'; overlay.classList.remove('show');
+      [...boardEl.querySelectorAll('.cell')].forEach(e=>e.remove());
+      for(let i=0;i<100;i++){const c=document.createElement('div');c.className='cell';c.dataset.i=i;boardEl.insertBefore(c,overlay)}
+      makeTray();
+    }
+    function makeTray(){trayEl.innerHTML='';pieces=[];for(let i=0;i<3;i++){const shape=shapes[Math.floor(Math.random()*shapes.length)];const color=colors[Math.floor(Math.random()*colors.length)];pieces.push({shape,color,used:false,el:null});renderPiece(pieces[i]);}}
+    function renderPiece(p){
+      const el=document.createElement('div');el.className='piece';p.el=el;
+      const h=p.shape.length,w=p.shape[0].length;el.style.gridTemplateColumns=`repeat(${w},23px)`;el.style.gridTemplateRows=`repeat(${h},23px)`;
+      p.shape.flat().forEach(v=>el.appendChild(v?Object.assign(document.createElement('div'),{className:'block'}):Object.assign(document.createElement('span'),{style:'width:23px;height:23px'})));
+      el.querySelectorAll('.block').forEach(b=>b.style.background=p.color);el.addEventListener('pointerdown',e=>startDrag(e,p));trayEl.appendChild(el);
+    }
+    function startDrag(e,p){if(p.used)return;e.preventCell=true;e.preventDefault();p.el.setPointerCapture(e.pointerId);drag={p,pointer:e.pointerId,x:e.clientX,y:e.clientY};
+      const ghost=document.createElement('div');ghost.className='ghost';ghost.id='ghost';const h=p.shape.length,w=p.shape[0].length;ghost.style.gridTemplateColumns=`repeat(${w},34px)`;ghost.style.gridTemplateRows=`repeat(${h},34px)`;
+      p.shape.flat().forEach(v=>{const b=document.createElement('div');if(v)b.className='block',b.style.background=p.color;else b.style.width='34px',b.style.height='34px';ghost.appendChild(b)});document.body.appendChild(ghost);p.el.style.opacity='.18';moveDrag(e);
+      window.addEventListener('pointermove',moveDrag);window.addEventListener('pointerup',endDrag,{once:true});
+    }
+    function boardRect(){return boardEl.getBoundingRect?boardEl.getBoundingRect():boardEl.getBoundingClientRect()}
+    function coords(x,y){const r=boardRect(),gap=3,pad=8,step=(r.width-pad*2-gap*9)/10+gap/10;return null}
+    function moveDrag(e){if(!drag)return;const g=document.getElementById('ghost');g.style.left=e.clientX+'px';g.style.top=e.clientY+'px';clearPreview();
+      const pos=getPos(e.clientX,e.clientY,drag.p.shape);if(!pos)return;const valid=canPlace(pos.r,pos.c,drag.p.shape);preview(pos.r,pos.c,drag.p.shape,valid);
+    }
+    function getPos(x,y,shape){const r=boardRect(),pad=8,g=3,cell=(r.width-pad*2-g*9)/10,step=cell+g;const c=Math.round((x-r.left-pad-cell/2)/step),rr=Math.round((y-r.top-pad-cell/2)/step);return {r:rr,c}}
+    function canPlace(r,c,shape){if(r<0||c<0)return false;for(let y=0;y<shape.length;y++)for(let x=0;x<shape[y].length;x++)if(shape[y][x]&&((r+y)>=10||(c+x)>=10||board[(r+y)*10+c+x]))return false;return true}
+    function preview(r,c,shape,valid){for(let y=0;y<shape.length;y++)for(let x=0;x<shape[y].length;x++)if(shape[y][x]&&r+y>=0&&r+y<10&&c+x>=0&&c+x<10){const el=boardEl.querySelector(`[data-i="${(r+y)*10+c+x}"]`);el.classList.add(valid?'preview':'invalid')}}
+    function clearPreview(){boardEl.querySelectorAll('.preview,.invalid').forEach(e=>e.classList.remove('preview','invalid'))}
+    function endDrag(e){if(!drag)return;window.removeEventListener('pointermove',moveDrag);const pos=getPos(e.clientX,e.clientY,drag.p.shape);if(pos&&canPlace(pos.r,pos.c,drag.p.shape)){place(pos.r,pos.c,drag.p);score+=drag.p.shape.flat().filter(Boolean).length;scoreEl.textContent=score;clearLines();}else drag.p.el.style.opacity='';clearPreview();const g=document.getElementById('ghost');if(g)g.remove();drag=null;checkGame();}
+    function place(r,c,p){p.shape.forEach((row,y)=>row.forEach((v,x)=>{if(v){const i=(r+y)*10+c+x;board[i]=p.color;const el=boardEl.querySelector(`[data-i="${i}"]`);el.style.background=p.color}}));p.used=true;p.el.classList.add('used')}
+    function clearLines(){const rows=[],cols=[];for(let r=0;r<10;r++)if(Array.from({length:10},(_,c)=>board[r*10+c]).every(Boolean))rows.push(r);for(let c=0;c<10;c++)if(Array.from({length:10},(_,r)=>board[r*10+c]).every(Boolean))cols.push(c);if(!rows.length&&!cols.length)return;
+      const ids=new Set();rows.forEach(r=>{for(let c=0;c<10;c++)ids.add(r*10+c)});cols.forEach(c=>{for(let r=0;r<10;r++)ids.add(r*10+c)});ids.forEach(i=>{board[i]=null;const el=boardEl.querySelector(`[data-i="${i}"]`);el.classList.add('rowflash');el.style.background=''});setTimeout(()=>ids.forEach(i=>boardEl.querySelector(`[data-i="${i}"]`)?.classList.remove('rowflash')),240);score+=(ids.size*2)+(rows.length+cols.length)*10;scoreEl.textContent=score;
+    }
+    function checkGame(){if(pieces.every(p=>p.used)){makeTray()}else if(pieces.filter(p=>!p.used).length){}
+      const remain=pieces.filter(p=>!p.used);if(remain.length&&remain.every(p=>{for(let r=0;r<10;r++)for(let c=0;c<10;c++)if(canPlace(r,c,p.shape))return false;return true}))gameOver();
+    }
+    function gameOver(){if(score>best){best=score;localStorage.setItem('blockpop-best',best)}finalEl.textContent=`Skor: ${score} · Terbaik: ${best}`;overlay.classList.add('show')}
+    document.getElementById('restart').addEventListener('click',init);init();
+  </script>
+</body>
+</html>
